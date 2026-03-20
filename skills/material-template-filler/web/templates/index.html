@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📋 材料模板填充</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📋 材料模板填充</h1>
+            <p class="subtitle">智能填充各类项目申报/竞赛材料模板</p>
+        </header>
+
+        <main>
+            <!-- 步骤 1：上传模板 -->
+            <section class="step-section">
+                <div class="step-header">
+                    <span class="step-number">1</span>
+                    <h2>上传模板文件</h2>
+                </div>
+                <div class="upload-area" id="template-upload-area">
+                    <div class="upload-icon">📄</div>
+                    <p>拖拽 .docx 模板文件到此处，或点击上传</p>
+                    <input type="file" id="template-input" accept=".docx" hidden>
+                </div>
+                <div class="file-info" id="template-info" style="display: none;">
+                    <span class="file-name" id="template-filename"></span>
+                    <span class="file-path" id="template-path"></span>
+                    <button class="btn-remove" onclick="removeTemplate()">✕</button>
+                </div>
+            </section>
+
+            <!-- 步骤 2：提供项目内容 -->
+            <section class="step-section">
+                <div class="step-header">
+                    <span class="step-number">2</span>
+                    <h2>提供项目内容</h2>
+                </div>
+                
+                <div class="tab-container">
+                    <div class="tabs">
+                        <button class="tab active" onclick="switchTab('input')">📝 直接输入</button>
+                        <button class="tab" onclick="switchTab('upload')">📎 上传文件</button>
+                        <button class="tab" onclick="switchTab('history')">📂 历史文件</button>
+                    </div>
+                    
+                    <!-- 直接输入 -->
+                    <div class="tab-content active" id="tab-input">
+                        <textarea 
+                            id="content-input" 
+                            placeholder="请输入项目内容，例如：&#10;项目名称：AI 辅助学习系统&#10;项目背景：当前在线教育...&#10;研究目标：开发智能推荐...&#10;团队成员：3 人...&#10;项目周期：6 个月&#10;预算：2 万元"
+                            rows="8"
+                        ></textarea>
+                        <p class="help-text">💡 支持格式：字段名：内容（每行一个字段）</p>
+                    </div>
+                    
+                    <!-- 上传文件 -->
+                    <div class="tab-content" id="tab-upload">
+                        <div class="upload-area small" id="input-upload-area">
+                            <div class="upload-icon">📎</div>
+                            <p>拖拽项目说明文件到此处（.md/.txt/.docx）</p>
+                            <input type="file" id="input-upload-input" accept=".md,.txt,.docx" hidden>
+                        </div>
+                        <div class="file-info" id="input-file-info" style="display: none;">
+                            <span class="file-name" id="input-filename"></span>
+                            <button class="btn-remove" onclick="removeInputFile()">✕</button>
+                        </div>
+                    </div>
+                    
+                    <!-- 历史文件 -->
+                    <div class="tab-content" id="tab-history">
+                        <button class="btn-refresh" onclick="loadHistory()">🔄 刷新列表</button>
+                        <div class="file-list" id="history-list"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 步骤 3：执行填充 -->
+            <section class="step-section">
+                <div class="step-header">
+                    <span class="step-number">3</span>
+                    <h2>执行填充</h2>
+                </div>
+                <div class="action-area">
+                    <button class="btn-fill" id="btn-fill" onclick="startFill()" disabled>
+                        🚀 开始填充
+                    </button>
+                </div>
+            </section>
+
+            <!-- 处理状态 -->
+            <section class="status-section" id="status-section" style="display: none;">
+                <div class="status-card">
+                    <div class="spinner"></div>
+                    <h3>正在填充模板...</h3>
+                    <p id="status-text">请稍候，这可能需要几分钟</p>
+                    <pre class="log-output" id="log-output"></pre>
+                </div>
+            </section>
+
+            <!-- 结果区域 -->
+            <section class="result-section" id="result-section" style="display: none;">
+                <div class="result-card">
+                    <h3>✅ 填充完成！</h3>
+                    <div class="result-info">
+                        <p><strong>输出文件：</strong><span id="result-filename"></span></p>
+                        <p><strong>生成时间：</strong><span id="result-time"></span></p>
+                    </div>
+                    <div class="result-actions">
+                        <a id="download-link" class="btn-download" href="#" download>
+                            📥 下载填充后的文档
+                        </a>
+                        <button class="btn-report" onclick="showReport()">
+                            📊 查看填充报告
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 报告模态框 -->
+        <div class="modal" id="report-modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>📊 填充报告</h3>
+                    <button class="btn-close" onclick="closeReport()">✕</button>
+                </div>
+                <div class="modal-body" id="report-content"></div>
+            </div>
+        </div>
+
+        <footer>
+            <p>基于 material-template-filler skill | 
+               <a href="https://github.com/openclaw/skills/material-template-filler" target="_blank">GitHub</a>
+            </p>
+        </footer>
+    </div>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
