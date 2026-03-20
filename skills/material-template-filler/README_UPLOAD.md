@@ -2,6 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-blue)](https://openclaw.ai)
+[![GitHub Stars](https://img.shields.io/github/stars/bm3668/material-template-filler)](https://github.com/bm3668/material-template-filler)
 
 智能填充各类项目申报/竞赛材料模板的 OpenClaw Skill。
 
@@ -19,7 +20,7 @@
 ### 1. 克隆仓库
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/material-template-filler.git
+git clone https://github.com/bm3668/material-template-filler.git
 cd material-template-filler
 ```
 
@@ -167,4 +168,4 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 ## 📞 支持
 
 - OpenClaw 文档：https://openclaw.ai
-- 问题反馈：GitHub Issues
+- 问题反馈：[GitHub Issues](https://github.com/bm3668/material-template-filler/issues)
