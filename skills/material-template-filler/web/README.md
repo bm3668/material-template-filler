@@ -4,20 +4,34 @@
 
 ## 🚀 快速启动
 
-### 1. 安装依赖
+### 方式 1：使用启动脚本（推荐）
 
 ```bash
-cd ~/.openclaw/workspace/skills/material-template-filler-web
-pip3 install --user flask
+cd ~/.openclaw/workspace/skills/material-template-filler/web
+./start.sh
 ```
 
-### 2. 启动服务
+### 方式 2：手动启动
 
 ```bash
+cd ~/.openclaw/workspace/skills/material-template-filler/web
+pip3 install --user flask python-docx
 python3 app.py
 ```
 
-### 3. 访问应用
+### 方式 3：独立部署
+
+如果你是从 GitHub 克隆的独立副本：
+
+```bash
+git clone https://github.com/bm3668/material-template-filler.git
+cd material-template-filler/web
+./start.sh
+```
+
+---
+
+### 访问应用
 
 打开浏览器访问：**http://localhost:5000** （或服务器公网 IP:5000）
 
