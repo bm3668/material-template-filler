@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-材料模板填充 Web 应用 - Flask 后端服务器（简化版）
+材料模板填充 Web 应用 - Flask 后端服务器
 完全使用 material-template-filler skill 的原有逻辑和目录结构
+
+支持三种部署模式：
+1. 独立部署：web/ 目录放在 skill 根目录下，使用相对路径
+2. OpenClaw 部署：自动检测 ~/.openclaw/workspace
+3. 自定义：通过环境变量指定路径
 """
 
 import os
@@ -22,19 +27,55 @@ app = Flask(__name__)
 PORT = int(os.environ.get('PORT', 5000))
 MAX_UPLOAD_SIZE = int(os.environ.get('MAX_UPLOAD_SIZE', 50)) * 1024 * 1024
 
-# 工作区路径
-WORKSPACE = Path.home() / '.openclaw' / 'workspace'
-TEMPLATES_DIR = WORKSPACE / 'templates'
-INPUTS_DIR = WORKSPACE / 'inputs'
-FILLED_DIR = WORKSPACE / 'filled'
+# ============ 路径配置（优先级：环境变量 > 相对路径 > OpenClaw 默认路径）============
 
-# Skill 路径
-SKILL_DIR = WORKSPACE / 'skills' / 'material-template-filler' / 'scripts'
+def detect_paths():
+    """自动检测并配置路径"""
+    
+    # 1. 优先使用环境变量
+    if os.environ.get('WORKSPACE_DIR'):
+        print("📍 使用环境变量配置的路径")
+        workspace = Path(os.environ['WORKSPACE_DIR'])
+        templates = Path(os.environ.get('TEMPLATES_DIR', workspace / 'templates'))
+        inputs = Path(os.environ.get('INPUTS_DIR', workspace / 'inputs'))
+        filled = Path(os.environ.get('FILLED_DIR', workspace / 'filled'))
+        skill_scripts = Path(os.environ.get('SKILL_SCRIPTS_DIR', workspace / 'skills' / 'material-template-filler' / 'scripts'))
+        return workspace, templates, inputs, filled, skill_scripts
+    
+    # 2. 尝试相对路径（web/ 在 skill 根目录下）
+    web_dir = Path(__file__).parent
+    skill_root = web_dir.parent
+    if (skill_root / 'scripts' / 'main.py').exists():
+        print("📍 使用相对路径（独立部署模式）")
+        # 独立部署：在 skill 目录下创建 workspace
+        workspace = skill_root / 'workspace'
+        templates = workspace / 'templates'
+        inputs = workspace / 'inputs'
+        filled = workspace / 'filled'
+        skill_scripts = skill_root / 'scripts'
+        return workspace, templates, inputs, filled, skill_scripts
+    
+    # 3. 回退到 OpenClaw 默认路径
+    print("📍 使用 OpenClaw 默认路径")
+    workspace = Path.home() / '.openclaw' / 'workspace'
+    templates = workspace / 'templates'
+    inputs = workspace / 'inputs'
+    filled = workspace / 'filled'
+    skill_scripts = workspace / 'skills' / 'material-template-filler' / 'scripts'
+    return workspace, templates, inputs, filled, skill_scripts
+
+
+WORKSPACE, TEMPLATES_DIR, INPUTS_DIR, FILLED_DIR, SKILL_DIR = detect_paths()
 SKILL_MAIN = SKILL_DIR / 'main.py'
 
 # 确保目录存在
 for dir_path in [TEMPLATES_DIR, INPUTS_DIR, FILLED_DIR]:
     dir_path.mkdir(parents=True, exist_ok=True)
+
+# 验证 skill 主程序存在
+if not SKILL_MAIN.exists():
+    print(f"⚠️  警告：未找到 skill 主程序 {SKILL_MAIN}")
+    print("   请确保 material-template-filler skill 已正确安装")
 
 app.config['MAX_CONTENT_LENGTH'] = MAX_UPLOAD_SIZE
 

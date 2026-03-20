@@ -1,13 +1,13 @@
-# 材料模板填写 Skill
+# 材料模板填写
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Skill-blue)](https://openclaw.ai)
 
-智能填充各类项目申报/竞赛材料模板，支持 **命令行** 和 **网页界面** 两种使用方式。
+智能填充各类项目申报/竞赛材料模板，支持 **命令行**、**OpenClaw 对话** 和 **网页界面** 三种使用方式。
 
-## 🎯 两种使用方式
+## 🎯 三种使用方式
 
-### 方式 1：OpenClaw Skill（命令行/对话）
+### 方式 1：OpenClaw Skill（对话式）
 在 OpenClaw 对话中使用，适合快速填充：
 ```
 /fill-template templates/申报书.docx
@@ -17,8 +17,15 @@
 ### 方式 2：Web 界面（浏览器）
 启动本地 Web 服务，可视化操作：
 ```bash
-cd web && pip3 install flask && python3 app.py
+cd web && ./start.sh
+# 或 python3 app.py
 # 访问 http://localhost:5000
+```
+
+### 方式 3：命令行直接调用
+```bash
+cd scripts
+python3 main.py /path/to/template.docx "项目名称：xxx。项目背景：xxx。"
 ```
 
 详见 [web/README.md](web/README.md)
@@ -54,26 +61,31 @@ pip install -r requirements.txt
 /home/admin/.openclaw/workspace/filled/
 ```
 
-## 📁 目录结构
+## 📁 项目结构
 
 ```
 material-template-filler/
-├── SKILL.md                  # Skill 定义（OpenClaw 集成）
-├── README.md                 # 本文件
-├── README_UPLOAD.md          # 上传版 README（含徽章）
+├── SKILL.md                  # OpenClaw Skill 定义
+├── README.md                 # 本文件（主文档）
+├── README_UPLOAD.md          # GitHub README（含徽章）
 ├── requirements.txt          # Python 依赖
-├── scripts/                  # 核心 Python 脚本
+│
+├── scripts/                  # 核心逻辑（后端）
 │   ├── main.py               # 主入口
 │   ├── template_parser.py    # 模板解析器
 │   ├── content_matcher.py    # 内容匹配引擎
 │   ├── docx_filler.py        # docx 填充器
-│   ├── validator.py          # 格式校验器
-│   └── report_generator.py   # 填充报告生成器
+│   ├── table_parser.py       # 表格字段解析器
+│   ├── report_generator.py   # 填充报告生成器
+│   └── validator.py          # 格式校验器
+│
 ├── web/                      # Web 前端界面
-│   ├── app.py                # Flask 后端
+│   ├── app.py                # Flask 后端服务器
+│   ├── start.sh              # 一键启动脚本
 │   ├── templates/index.html  # 前端页面
 │   ├── static/               # CSS/JS
 │   └── README.md             # Web 使用说明
+│
 ├── examples/
 │   └── sample_input.md       # 示例输入
 └── tests/
