@@ -53,6 +53,11 @@
                             placeholder="请输入项目内容，例如：&#10;项目名称：AI 辅助学习系统&#10;项目背景：当前在线教育...&#10;研究目标：开发智能推荐...&#10;团队成员：3 人...&#10;项目周期：6 个月&#10;预算：2 万元"
                             rows="8"
                         ></textarea>
+                        <div class="action-area" style="margin-top: 15px;">
+                            <button class="btn-mindmap" id="btn-generate-mindmap" onclick="generateMindmapFromContent()" disabled>
+                                🎨 生成思维导图预览
+                            </button>
+                        </div>
                         <p class="help-text">💡 支持格式：字段名：内容（每行一个字段）</p>
                     </div>
                     
@@ -67,20 +72,71 @@
                             <span class="file-name" id="input-filename"></span>
                             <button class="btn-remove" onclick="removeInputFile()">✕</button>
                         </div>
+                        <div class="action-area" style="margin-top: 15px;">
+                            <button class="btn-mindmap" id="btn-generate-mindmap-upload" onclick="generateMindmapFromFile()" disabled>
+                                🎨 生成思维导图预览
+                            </button>
+                        </div>
                     </div>
                     
                     <!-- 历史文件 -->
                     <div class="tab-content" id="tab-history">
                         <button class="btn-refresh" onclick="loadHistory()">🔄 刷新列表</button>
                         <div class="file-list" id="history-list"></div>
+                        <div class="action-area" style="margin-top: 15px;">
+                            <button class="btn-mindmap" id="btn-generate-mindmap-history" onclick="generateMindmapFromHistory()" disabled>
+                                🎨 生成思维导图预览
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- 步骤 3：执行填充 -->
-            <section class="step-section">
+            <!-- 步骤 3：思维导图选项 -->
+            <section class="step-section" id="mindmap-section">
                 <div class="step-header">
                     <span class="step-number">3</span>
+                    <h2>🎨 思维导图选项（可选）</h2>
+                </div>
+                <div class="mindmap-options">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="generate-mindmap" onchange="toggleMindmapOptions()">
+                        📊 生成并插入思维导图
+                    </label>
+                    
+                    <div id="mindmap-input-container" style="display: none; margin-top: 15px;">
+                        <div class="tabs" style="margin-bottom: 10px;">
+                            <button class="tab active" onclick="switchMindmapTab('auto')">✨ 自动生成</button>
+                            <button class="tab" onclick="switchMindmapTab('custom')">✏️ 自定义 Mermaid</button>
+                        </div>
+                        
+                        <!-- 自动生成 -->
+                        <div id="mindmap-tab-auto" class="mindmap-tab-content active">
+                            <p class="help-text">根据项目内容自动生成思维导图</p>
+                            <button class="btn-preview" onclick="previewMindmap()">👁️ 预览生成的思维导图</button>
+                            <pre class="mermaid-preview" id="mermaid-preview-auto" style="display: none;"></pre>
+                        </div>
+                        
+                        <!-- 自定义 Mermaid -->
+                        <div id="mindmap-tab-custom" class="mindmap-tab-content" style="display: none;">
+                            <textarea 
+                                id="mermaid-input" 
+                                placeholder="输入 Mermaid 格式的思维导图，例如：&#10;&#10;mindmap&#10;  root((项目主题))&#10;    分支 1&#10;      子节点 A&#10;    分支 2&#10;      子节点 B"
+                                rows="10"
+                                style="font-family: monospace; font-size: 13px;"
+                            ></textarea>
+                            <p class="help-text">💡 <a href="https://mermaid.live/" target="_blank">Mermaid 语法参考</a> | 
+                                <a href="#" onclick="insertExampleMermaid()">插入示例</a></p>
+                            <pre class="mermaid-preview" id="mermaid-preview-custom" style="display: none;"></pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 步骤 4：执行填充 -->
+            <section class="step-section">
+                <div class="step-header">
+                    <span class="step-number">4</span>
                     <h2>执行填充</h2>
                 </div>
                 <div class="action-area">
@@ -115,6 +171,9 @@
                         <button class="btn-report" onclick="showReport()">
                             📊 查看填充报告
                         </button>
+                        <button class="btn-chat" onclick="openChatModal()">
+                            💬 对话改进
+                        </button>
                     </div>
                 </div>
             </section>
@@ -128,6 +187,70 @@
                     <button class="btn-close" onclick="closeReport()">✕</button>
                 </div>
                 <div class="modal-body" id="report-content"></div>
+            </div>
+        </div>
+
+        <!-- 思维导图预览模态框 -->
+        <div class="modal" id="mindmap-modal" style="display: none;">
+            <div class="modal-content modal-large">
+                <div class="modal-header">
+                    <h3>🎨 思维导图预览</h3>
+                    <button class="btn-close" onclick="closeMindmapModal()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div class="mindmap-preview-container">
+                        <div class="mindmap-mermaid-code">
+                            <h4>Mermaid 代码：</h4>
+                            <pre id="mindmap-mermaid-code"></pre>
+                        </div>
+                        <div class="mindmap-actions">
+                            <button class="btn-copy" onclick="copyMermaidCode()">📋 复制 Mermaid 代码</button>
+                            <a href="https://mermaid.live/" target="_blank" class="btn-edit">✏️ 在线编辑</a>
+                        </div>
+                        <div class="mindmap-visualization">
+                            <h4>预览效果：</h4>
+                            <p class="help-text">将上方代码复制到 <a href="https://mermaid.live/" target="_blank">Mermaid Live Editor</a> 查看可视化效果</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 对话改进模态框 -->
+        <div class="modal" id="chat-modal" style="display: none;">
+            <div class="modal-content modal-chat">
+                <div class="modal-header">
+                    <h3>💬 对话改进文档</h3>
+                    <button class="btn-close" onclick="closeChatModal()">✕</button>
+                </div>
+                <div class="modal-body chat-body">
+                    <div class="chat-messages" id="chat-messages">
+                        <div class="message bot-message">
+                            <div class="message-content">
+                                你好！我是你的文档助手 🤖
+                                <br><br>
+                                文档已生成，如果你对内容不满意，可以告诉我需要修改什么，例如：
+                                <br>
+                                • "把项目背景写得更详细一些"
+                                <br>
+                                • "增加技术创新点的描述"
+                                <br>
+                                • "调整语气，更正式一些"
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-input-area">
+                        <textarea 
+                            id="chat-input" 
+                            placeholder="请输入你的修改要求..."
+                            rows="3"
+                            onkeydown="if(event.keyCode===13 && !event.shiftKey){event.preventDefault();sendChatMessage();}"
+                        ></textarea>
+                        <button class="btn-send" onclick="sendChatMessage()" id="btn-send-chat">
+                            📤 发送
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 

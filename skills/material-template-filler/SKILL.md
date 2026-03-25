@@ -1,6 +1,10 @@
 ---
 name: material-template-filler
-description: 通用项目模板智能填充。读取 docx 模板和用户输入，自动匹配内容并填充到对应模块。支持基金申报、竞赛材料、项目计划书等场景。
+description: 通用项目模板智能填充系统。支持基金申报、竞赛材料、项目计划书等场景。
+自动识别 Word 模板的标题模块和表格字段，智能匹配项目内容并填充。
+输出填充后的.docx 文件 + 详细填充报告（含置信度评分）。
+支持批量填充、历史项目复用、Web 界面操作。
+v2.0 引擎基于 Anthropic docx skill 最佳实践重构，支持专业样式管理、文档验证。
 homepage: https://github.com/openclaw/skills/material-template-filler
 emoji: 📋
 requires:

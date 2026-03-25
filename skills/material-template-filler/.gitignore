@@ -8,9 +8,21 @@ env/
 venv/
 *.egg-info/
 
-# OpenClaw
-.filled/
-templates/
+# OpenClaw workspace
+../../filled/
+../../templates/
+../../inputs/
+../../.openclaw/
+../../memory/
+../../step.zip
+../../step_extracted/
+../../AGENTS.md
+../../SOUL.md
+../../USER.md
+../../TOOLS.md
+../../IDENTITY.md
+../../HEARTBEAT.md
+../../gen_mindmap.py
 *.docx
 !examples/*.docx
 

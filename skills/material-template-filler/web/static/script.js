@@ -9,6 +9,9 @@ let state = {
     content: '',
     selectedHistoryFile: null,
     currentTab: 'input',
+    generateMindmap: false,
+    mermaidContent: '',
+    mindmapTab: 'auto',
     isProcessing: false
 };
 
@@ -165,6 +168,12 @@ async function uploadInputFile(file) {
             switchTab('upload');
             
             checkFillButton();
+            
+            // 启用思维导图生成按钮
+            const btn = document.getElementById('btn-generate-mindmap-upload');
+            if (btn) {
+                btn.disabled = false;
+            }
         } else {
             alert('上传失败：' + data.error);
         }
@@ -237,6 +246,12 @@ function selectHistoryFile(path, name) {
     }
     
     checkFillButton();
+    
+    // 启用思维导图生成按钮（历史文件标签页）
+    const btn = document.getElementById('btn-generate-mindmap-history');
+    if (btn) {
+        btn.disabled = false;
+    }
 }
 
 // 检查填充按钮状态
@@ -260,6 +275,12 @@ function checkFillButton() {
 document.getElementById('content-input')?.addEventListener('input', (e) => {
     state.content = e.target.value;
     checkFillButton();
+    
+    // 启用/禁用思维导图按钮
+    const btn = document.getElementById('btn-generate-mindmap');
+    if (btn) {
+        btn.disabled = !state.content.trim() || state.isProcessing;
+    }
 });
 
 // 开始填充
@@ -278,7 +299,12 @@ async function startFill() {
         const payload = {
             template_path: state.templatePath,
             content: state.currentTab === 'input' ? state.content : '',
-            input_path: (state.currentTab === 'upload' || state.currentTab === 'history') ? state.inputPath : null
+            input_path: (state.currentTab === 'upload' || state.currentTab === 'history') ? state.inputPath : null,
+            // 思维导图选项
+            generate_mindmap: state.generateMindmap,
+            mermaid_content: state.mindmapTab === 'custom' ? 
+                document.getElementById('mermaid-input')?.value : 
+                state.mermaidContent
         };
         
         const response = await fetch('/api/fill', {
@@ -306,6 +332,10 @@ async function startFill() {
             
             // 存储报告内容
             window.currentReport = data.report_content;
+            
+            // 保存状态用于对话改进
+            state.lastOutputFile = data.output_filename;
+            state.originalContent = state.content;
             
             if (data.log) {
                 document.getElementById('log-output').textContent = data.log;
@@ -361,3 +391,313 @@ window.addEventListener('click', (e) => {
 
 // 页面加载时加载历史文件列表
 loadHistory();
+
+// ========== 思维导图相关功能 ==========
+
+// 从当前内容生成思维导图
+async function generateMindmapFromContent() {
+    const content = document.getElementById('content-input').value;
+    if (!content.trim()) {
+        alert('请先输入项目内容');
+        return;
+    }
+    
+    await generateMindmap(content);
+}
+
+// 从上传的文件生成思维导图
+async function generateMindmapFromFile() {
+    if (!state.inputPath) {
+        alert('请先上传文件');
+        return;
+    }
+    
+    const btn = document.getElementById('btn-generate-mindmap-upload');
+    const originalText = btn.textContent;
+    btn.textContent = '⏳ 生成中...';
+    btn.disabled = true;
+    
+    try {
+        // 读取文件内容
+        const response = await fetch('/api/read-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: state.inputPath })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            await generateMindmap(data.content, btn, originalText);
+        } else {
+            alert('读取文件失败：' + data.error);
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    } catch (error) {
+        console.error('读取文件失败:', error);
+        alert('读取文件失败，请重试');
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+}
+
+// 从历史文件生成思维导图
+async function generateMindmapFromHistory() {
+    if (!state.selectedHistoryFile) {
+        alert('请先选择历史文件');
+        return;
+    }
+    
+    const btn = document.getElementById('btn-generate-mindmap-history');
+    const originalText = btn.textContent;
+    btn.textContent = '⏳ 生成中...';
+    btn.disabled = true;
+    
+    try {
+        const response = await fetch('/api/read-file', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: state.selectedHistoryFile })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            await generateMindmap(data.content, btn, originalText);
+        } else {
+            alert('读取文件失败：' + data.error);
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    } catch (error) {
+        console.error('读取文件失败:', error);
+        alert('读取文件失败，请重试');
+        btn.textContent = originalText;
+        btn.disabled = false;
+    }
+}
+
+// 生成思维导图（通用函数）
+async function generateMindmap(content, btn = null, originalText = '🎨 生成思维导图预览') {
+    // 如果没有传入按钮，使用默认按钮
+    if (!btn) {
+        btn = document.getElementById('btn-generate-mindmap');
+        if (!btn) {
+            btn = document.getElementById('btn-generate-mindmap-upload');
+        }
+        if (!btn) {
+            btn = document.getElementById('btn-generate-mindmap-history');
+        }
+        originalText = btn ? btn.textContent : '🎨 生成思维导图预览';
+    }
+    
+    if (btn) {
+        btn.textContent = '⏳ 生成中...';
+        btn.disabled = true;
+    }
+    
+    try {
+        const response = await fetch('/api/generate-mindmap', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: content })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // 存储 Mermaid 代码
+            state.mermaidContent = data.mermaid;
+            
+            // 显示预览模态框
+            showMindmapModal(data.mermaid);
+        } else {
+            alert('生成失败：' + data.error);
+        }
+    } catch (error) {
+        console.error('生成思维导图失败:', error);
+        alert('生成失败，请重试');
+    } finally {
+        if (btn) {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    }
+}
+
+// 显示思维导图预览模态框
+function showMindmapModal(mermaidCode) {
+    document.getElementById('mindmap-mermaid-code').textContent = mermaidCode;
+    document.getElementById('mindmap-modal').style.display = 'flex';
+}
+
+// 关闭思维导图模态框
+function closeMindmapModal() {
+    document.getElementById('mindmap-modal').style.display = 'none';
+}
+
+// 复制 Mermaid 代码
+function copyMermaidCode() {
+    const code = document.getElementById('mindmap-mermaid-code').textContent;
+    navigator.clipboard.writeText(code).then(() => {
+        alert('✅ Mermaid 代码已复制到剪贴板！');
+    }).catch(err => {
+        alert('复制失败，请手动复制');
+    });
+}
+
+// 点击模态框外部关闭
+window.addEventListener('click', (e) => {
+    const reportModal = document.getElementById('report-modal');
+    const mindmapModal = document.getElementById('mindmap-modal');
+    const chatModal = document.getElementById('chat-modal');
+    
+    if (e.target === reportModal) {
+        closeReport();
+    }
+    if (e.target === mindmapModal) {
+        closeMindmapModal();
+    }
+    if (e.target === chatModal) {
+        closeChatModal();
+    }
+});
+
+// ========== 对话改进功能 ==========
+
+// 打开对话模态框
+function openChatModal() {
+    document.getElementById('chat-modal').style.display = 'flex';
+    // 聚焦到输入框
+    setTimeout(() => {
+        document.getElementById('chat-input').focus();
+    }, 100);
+}
+
+// 关闭对话模态框
+function closeChatModal() {
+    document.getElementById('chat-modal').style.display = 'none';
+}
+
+// 发送对话消息
+async function sendChatMessage() {
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    
+    if (!message) return;
+    
+    const sendBtn = document.getElementById('btn-send-chat');
+    sendBtn.disabled = true;
+    
+    // 添加用户消息到聊天窗口
+    addChatMessage(message, 'user');
+    
+    // 清空输入框
+    input.value = '';
+    
+    // 显示正在输入提示
+    const loadingId = addLoadingMessage();
+    
+    try {
+        const response = await fetch('/api/chat-improve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                message: message,
+                last_output: state.lastOutputFile,
+                original_content: state.originalContent
+            })
+        });
+        
+        // 移除加载提示
+        removeLoadingMessage(loadingId);
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // 添加 AI 回复
+            addChatMessage(data.response, 'bot');
+            
+            // 如果有新版本文档，更新下载链接
+            if (data.new_version_file) {
+                state.lastOutputFile = data.new_version_file;
+                document.getElementById('download-link').href = `/api/download/${data.new_version_file}`;
+                document.getElementById('download-link').textContent = `📥 下载最新版本 (${data.version || 'v2'})`;
+                
+                // 添加系统消息
+                addChatMessage(`✅ 已生成新版本文档：<strong>${data.new_version_file}</strong>`, 'bot');
+            }
+        } else {
+            addChatMessage('❌ 处理失败：' + data.error, 'bot');
+        }
+    } catch (error) {
+        console.error('对话失败:', error);
+        removeLoadingMessage(loadingId);
+        addChatMessage('❌ 连接失败，请重试', 'bot');
+    } finally {
+        sendBtn.disabled = false;
+        input.focus();
+    }
+}
+
+// 添加聊天消息
+function addChatMessage(content, type) {
+    const messagesContainer = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${type}-message`;
+    
+    const timestamp = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+    
+    messageDiv.innerHTML = `
+        <div class="message-content">${content}</div>
+        <div class="message-meta">${type === 'user' ? '你' : '助手'} · ${timestamp}</div>
+    `;
+    
+    messagesContainer.appendChild(messageDiv);
+    
+    // 滚动到底部
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// 添加加载提示
+function addLoadingMessage() {
+    const messagesContainer = document.getElementById('chat-messages');
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'message bot-message';
+    loadingDiv.id = 'loading-' + Date.now();
+    
+    loadingDiv.innerHTML = `
+        <div class="message-content">
+            <div class="loading-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    `;
+    
+    messagesContainer.appendChild(loadingDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    return loadingDiv.id;
+}
+
+// 移除加载提示
+function removeLoadingMessage(loadingId) {
+    const loadingEl = document.getElementById(loadingId);
+    if (loadingEl) {
+        loadingEl.remove();
+    }
+}
+
+// 检查填充按钮状态（更新版）
+function checkFillButton() {
+    const btn = document.getElementById('btn-fill');
+    const hasTemplate = state.templatePath !== null;
+    const hasContent = (state.currentTab === 'input' && state.content.trim()) ||
+                       (state.currentTab === 'upload' && state.inputPath) ||
+                       (state.currentTab === 'history' && state.selectedHistoryFile);
+    
+    btn.disabled = !(hasTemplate && hasContent) || state.isProcessing;
+}

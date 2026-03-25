@@ -16,6 +16,7 @@ import json
 import uuid
 import shutil
 import subprocess
+import re
 from datetime import datetime
 from pathlib import Path
 from flask import Flask, request, jsonify, send_file, render_template
@@ -173,6 +174,8 @@ def fill_template():
     template_path = data.get('template_path')
     input_path = data.get('input_path')  # 项目说明文件路径
     content = data.get('content', '')    # 或直接输入的内容
+    generate_mindmap = data.get('generate_mindmap', False)  # 是否生成思维导图
+    mermaid_content = data.get('mermaid_content', '')  # 自定义 Mermaid 内容
     
     if not template_path or not Path(template_path).exists():
         return jsonify({'error': '模板文件不存在'}), 400
@@ -212,56 +215,63 @@ def fill_template():
     else:
         return jsonify({'error': '请提供项目内容或上传项目说明文件'}), 400
     
-    # 调用原始 skill 的 main.py
+    # 使用 docx_filler_v3 进行填充（支持图片插入）
     try:
-        cmd = [
-            sys.executable, str(SKILL_MAIN),
-            template_path,
-            user_input
-        ]
+        # 生成输出文件名
+        timestamp = generate_timestamp()
+        output_filename = f"filled_{timestamp}.docx"
+        output_path = FILLED_DIR / output_filename
         
-        result = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
-            timeout=300,
-            cwd=str(SKILL_DIR)
-        )
+        # 导入 docx_filler_v3
+        sys.path.insert(0, str(SKILL_DIR))
+        from docx_filler_v3 import DocxFillerV3
         
-        if result.returncode != 0:
-            return jsonify({
-                'error': '填充失败',
-                'details': result.stderr
-            }), 500
+        # 创建填充器
+        filler = DocxFillerV3(template_path, str(output_path))
         
-        # 查找最新生成的文件
-        filled_files = list(FILLED_DIR.glob('*_filled_*.docx'))
-        report_files = list(FILLED_DIR.glob('*_fill_report_*.md'))
+        # 填充文本内容
+        filler.fill(user_input)
         
-        if not filled_files:
-            return jsonify({'error': '未生成输出文件'}), 500
+        # 生成并插入思维导图
+        mindmap_generated = False
+        if generate_mindmap:
+            if mermaid_content.strip():
+                # 使用自定义 Mermaid 内容
+                success = filler.insert_mindmap(
+                    mermaid_content=mermaid_content,
+                    caption='图 1: 项目思维导图',
+                    method='dot'
+                )
+                mindmap_generated = success
+            else:
+                # 从文本自动生成（简单实现：提取关键词）
+                mindmap_content = generate_mermaid_from_text(user_input)
+                if mindmap_content:
+                    success = filler.insert_mindmap(
+                        mermaid_content=mindmap_content,
+                        caption='图 1: 项目思维导图',
+                        method='dot'
+                    )
+                    mindmap_generated = success
         
-        # 获取最新的文件
-        output_file = max(filled_files, key=lambda x: x.stat().st_mtime)
-        report_file = max(report_files, key=lambda x: x.stat().st_mtime) if report_files else None
+        # 添加填充报告
+        filler.add_fill_report()
         
-        # 读取报告内容
-        report_content = ''
-        if report_file and report_file.exists():
-            with open(report_file, 'r', encoding='utf-8') as f:
-                report_content = f.read()
+        # 保存文档
+        filler.doc.save(str(output_path))
+        
+        # 获取输出文件信息
+        output_file = output_path
+        report_content = ''  # 简化实现，暂不生成报告
         
         return jsonify({
             'success': True,
             'output_filename': output_file.name,
-            'report_filename': report_file.name if report_file else None,
+            'report_filename': None,
             'report_content': report_content,
-            'log': result.stdout
+            'log': ''
         })
         
-    except subprocess.TimeoutExpired:
-        return jsonify({'error': '处理超时，请重试'}), 500
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -279,6 +289,209 @@ def download_file(filename):
         as_attachment=True,
         download_name=filename
     )
+
+
+@app.route('/api/generate-mindmap', methods=['POST'])
+def generate_mindmap_api():
+    """从文本生成思维导图 Mermaid 代码"""
+    data = request.json
+    text = data.get('text', '')
+    
+    if not text.strip():
+        return jsonify({'error': '请提供文本内容'}), 400
+    
+    try:
+        mermaid = generate_mermaid_from_text(text)
+        return jsonify({
+            'success': True,
+            'mermaid': mermaid
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/read-file', methods=['POST'])
+def read_file_api():
+    """读取文件内容（用于思维导图生成）"""
+    data = request.json
+    file_path = data.get('path', '')
+    
+    if not file_path or not Path(file_path).exists():
+        return jsonify({'error': '文件不存在'}), 400
+    
+    try:
+        ext = Path(file_path).suffix.lower()
+        content = ''
+        
+        if ext in ['.md', '.txt']:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        elif ext == '.docx':
+            from docx import Document
+            doc = Document(file_path)
+            content = '\n'.join([p.text for p in doc.paragraphs if p.text.strip()])
+        else:
+            return jsonify({'error': '不支持的文件格式'}), 400
+        
+        return jsonify({
+            'success': True,
+            'content': content
+        })
+    except Exception as e:
+        return jsonify({'error': f'读取文件失败：{str(e)}'}), 500
+
+
+@app.route('/api/chat-improve', methods=['POST'])
+def chat_improve():
+    """对话式改进文档"""
+    data = request.json
+    message = data.get('message', '')
+    last_output = data.get('last_output', '')
+    original_content = data.get('original_content', '')
+    
+    if not message:
+        return jsonify({'error': '请提供修改要求'}), 400
+    
+    try:
+        # 生成改进建议的回复
+        improvement_response = generate_improvement_response(message, original_content)
+        
+        # 如果需要生成新版本文档
+        new_version_file = None
+        version = None
+        
+        if should_regenerate_document(message):
+            # 生成新版本文档
+            new_version_file = regenerate_document(last_output, message, original_content)
+            if new_version_file:
+                version = 'v2'
+        
+        return jsonify({
+            'success': True,
+            'response': improvement_response,
+            'new_version_file': new_version_file,
+            'version': version
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'处理失败：{str(e)}'}), 500
+
+
+def generate_improvement_response(message: str, content: str) -> str:
+    """
+    生成改进建议的回复（简化实现）
+    """
+    message_lower = message.lower()
+    
+    if '详细' in message_lower or '更多' in message_lower:
+        return "好的，我会让内容更加详细。建议在以下几个部分增加更多细节：\n\n1. **项目背景**：可以补充行业现状、市场规模等数据\n2. **技术方案**：可以详细说明技术路线、实现细节\n3. **创新点**：可以具体描述与现有方案的差异\n\n请告诉我具体想详细哪个部分，我会帮你生成新版本文档。"
+    
+    elif '创新' in message_lower:
+        return "好的，我来帮你强化创新点的描述。建议从以下角度突出创新性：\n\n1. **技术创新**：使用了什么新技术或新方法\n2. **应用创新**：解决了什么之前没解决的问题\n3. **模式创新**：有什么新的商业模式或应用场景\n\n需要我帮你生成一个强调创新点的新版本吗？"
+    
+    elif '正式' in message_lower or '语气' in message_lower:
+        return "好的，我会调整文档语气，使其更加正式和专业。主要会：\n\n1. 使用更正式的词汇和表达\n2. 增加客观数据支撑\n3. 减少口语化表达\n4. 使用更规范的文档格式\n\n需要我现在生成一个正式版本吗？"
+    
+    elif '简短' in message_lower or '简洁' in message_lower:
+        return "好的，我会让内容更加简洁明了。主要会：\n\n1. 删除冗余描述\n2. 突出核心要点\n3. 使用更精炼的语言\n4. 保留关键数据和结论\n\n需要我现在生成一个简洁版本吗？"
+    
+    else:
+        return f"收到你的修改要求：\"{message}\"\n\n我可以帮你：\n• 调整内容详细程度\n• 强化特定部分（如创新点、技术细节）\n• 调整文档语气和风格\n• 优化结构和逻辑\n\n请告诉我具体想怎么改，我会生成新版本文档。"
+
+
+def should_regenerate_document(message: str) -> bool:
+    """判断是否需要重新生成文档"""
+    keywords = ['生成', '修改', '调整', '重写', '改进', '优化', '版本', '详细', '简洁', '正式']
+    return any(keyword in message for keyword in keywords)
+
+
+def regenerate_document(last_output: str, message: str, original_content: str) -> str:
+    """
+    重新生成文档（简化实现：复制原文档）
+    实际应该调用 AI API 生成新内容
+    """
+    if not last_output:
+        return None
+    
+    import os
+    from datetime import datetime
+    import shutil
+    
+    base_name = os.path.splitext(last_output)[0]
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    new_filename = f"{base_name}_v2_{timestamp}.docx"
+    new_path = FILLED_DIR / new_filename
+    
+    # 复制原文档作为新版本
+    last_path = FILLED_DIR / last_output
+    
+    if last_path.exists():
+        shutil.copy(last_path, new_path)
+        return new_filename
+    
+    return None
+
+
+def generate_mermaid_from_text(text: str) -> str:
+    """
+    从文本生成简单的 Mermaid 思维导图
+    
+    这是一个简化实现，提取文本中的关键词和结构
+    """
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    
+    # 提取项目名称作为根节点
+    root_name = "项目主题"
+    for line in lines[:5]:  # 在前 5 行查找
+        if '项目名称' in line:
+            if ':' in line:
+                root_name = line.split(':')[1].strip()
+            else:
+                root_name = line.replace('项目名称', '').strip()
+            break
+    
+    # 构建思维导图
+    mermaid_lines = [f"mindmap", f"  root(({root_name}))"]
+    
+    # 提取关键章节
+    sections = []
+    current_section = None
+    
+    for line in lines:
+        # 检查是否是章节标题
+        if re.match(r'^[一二三四五六七八九十]+[、.．]', line) or \
+           re.match(r'^\d+[.．]', line) or \
+           re.match(r'^第 [一二三四五六七八九十\d]+[章节]', line):
+            # 提取章节名称
+            section_name = re.sub(r'^[一二三四五六七八九十\d]+[、.．第章节]', '', line).strip()
+            if section_name and len(section_name) < 50:
+                current_section = section_name
+                sections.append(current_section)
+                mermaid_lines.append(f"    {current_section}")
+        elif current_section and len(line) < 100:
+            # 提取子节点（短行）
+            if ':' in line:
+                key = line.split(':')[0].strip()
+                if key and len(key) < 30:
+                    mermaid_lines.append(f"      {key}")
+    
+    # 如果没有提取到章节，使用默认结构
+    if len(mermaid_lines) <= 2:
+        mermaid_lines = [
+            "mindmap",
+            f"  root(({root_name}))",
+            "    项目概述",
+            "      背景",
+            "      目标",
+            "    技术方案",
+            "      核心功能",
+            "      创新点",
+            "    实施计划",
+            "      阶段划分",
+            "      时间安排"
+        ]
+    
+    return '\n'.join(mermaid_lines)
 
 
 if __name__ == '__main__':

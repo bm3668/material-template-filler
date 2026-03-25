@@ -8,7 +8,9 @@
 """
 
 import re
+import json
 from typing import Dict, List
+from llm_parser import LLMContentParser
 
 
 class ContentMatcher:
@@ -78,6 +80,22 @@ class ContentMatcher:
         self.sections = sections
         self.matches = {}
         self.confidence = {}
+        # LLM 解析器（可选）
+        self.llm_parser = None
+        self.llm_result = None
+        self._try_llm_parse()
+    
+    def _try_llm_parse(self):
+        '''尝试使用 LLM 解析内容'''
+        try:
+            self.llm_parser = LLMContentParser()
+            if self.llm_parser.client:
+                self.llm_result = self.llm_parser.parse(self.user_input)
+                if self.llm_result:
+                    print(f"   ✅ LLM 解析成功，提取到 {len([v for v in self.llm_result.values() if v])} 个字段")
+        except Exception as e:
+            print(f"   ⚠️  LLM 解析不可用：{e}")
+            self.llm_result = None
         
     def match(self) -> Dict[str, dict]:
         """将用户内容匹配到各模块"""
@@ -219,7 +237,23 @@ class ContentMatcher:
                     self.confidence[field] = 0.5  # 标记为 LLM 生成
     
     def _extract_field_content(self, field: str, is_personal: bool = False) -> tuple:
-        """提取特定字段的内容"""
+        """
+        提取特定字段的内容
+        优先使用 LLM 解析结果，回退到规则匹配
+        """
+        # 【优先】尝试使用 LLM 解析结果
+        if self.llm_result and field in self.llm_result:
+            llm_content = self.llm_result.get(field, '')
+            if llm_content and llm_content.strip():
+                # LLM 提取的内容，置信度较高
+                if is_personal:
+                    # 个人信息需要验证格式
+                    if len(llm_content) < 100 and '.' not in llm_content:
+                        return llm_content, 0.85
+                else:
+                    return llm_content, 0.8
+        
+        # 【回退】规则匹配
         keywords = self._get_keywords_for_title(field)
         
         for keyword in keywords:
@@ -731,13 +765,19 @@ class ContentMatcher:
         segments = re.split(r'[。！？\n]+', self.user_input)
         return [s.strip() for s in segments if s.strip()]
     
-    def _extract_related_content(self, keyword: str) -> str:
-        """提取与关键词相关的内容"""
+    def _extract_related_content(self, keyword: str, max_length: int = None) -> str:
+        """
+        提取与关键词相关的内容
+        
+        Args:
+            keyword: 关键词
+            max_length: 最大长度限制（可选）
+        """
         lines = self.user_input.split('\n')
         
         # 定义全角和半角冒号
         COLON_HALF = ':'  # U+003A
-        COLON_FULL = '：'  # U+FF1A
+        COLON_FULL = ':'  # U+FF1A
         
         # 优先尝试提取"关键词：内容"格式（支持多行内容）
         for i, line in enumerate(lines):
@@ -753,17 +793,31 @@ class ContentMatcher:
                     
                 if len(parts) > 1:
                     content = parts[1].strip()
-                    # 继续收集后续行，直到遇到下一个字段开始
+                    # 继续收集后续行，直到遇到下一个章节开始
                     j = i + 1
                     while j < len(lines):
                         next_line = lines[j].strip()
-                        # 检查是否是新的字段开始（行首是字段名 + 冒号）
-                        # 注意：正则中字段名之间不能有空格
-                        field_pattern = r'^(摘要|设计目标|作品详情|解决方案详情|经济社会价值|经济与社会价值|进度计划|项目进度计划|项目名称|参赛赛项|学校名称|团队名称|联系电话|邮箱|指导教师|队长姓名|队员姓名|技术方案|研究目标|研究内容|项目背景|创新点|预期成果|经费预算)[:：]'
+                        
+                        # 【关键修复】检查是否是新的顶级章节（一、二、三、四...）
+                        # 这能防止提取跨越多个章节
+                        if re.match(r'^[一二三四五六七八九十]+,', next_line):
+                            break
+                        
+                        # 检查是否是新的字段开始（字段名 + 冒号）
+                        field_pattern = r'^(摘要 | 设计目标 | 作品详情 | 解决方案详情 | 经济社会价值 | 经济与社会价值 | 进度计划 | 项目进度计划 | 项目名称 | 参赛赛项 | 学校名称 | 团队名称 | 联系电话 | 邮箱 | 指导教师 | 队长姓名 | 队员姓名 | 技术方案 | 研究目标 | 研究内容 | 项目背景 | 创新点 | 预期成果 | 经费预算)[:：]'
                         if re.match(field_pattern, next_line):
                             break
                         content += '\n' + next_line
                         j += 1
+                    
+                    # 如果有长度限制，进行截断
+                    if max_length and len(content) > max_length:
+                        cutoff = content[:max_length].rfind('.')
+                        if cutoff > max_length * 0.7:
+                            content = content[:cutoff + 1]
+                        else:
+                            content = content[:max_length - 3] + '...'
+                    
                     if len(content) > 10:
                         return content
         
@@ -792,7 +846,7 @@ class ContentMatcher:
                         return line.strip()
         
         # 如果没有找到标签格式，尝试按句子提取
-        sentences = re.split(r'[。！？]', self.user_input)
+        sentences = re.split(r'[.！？]', self.user_input)
         related = [s.strip() for s in sentences if keyword in s and len(s.strip()) > 5]
         
         # 过滤掉明显是其他章节的内容
@@ -803,10 +857,10 @@ class ContentMatcher:
                 filtered.append(s)
         
         if filtered:
-            return '。'.join(filtered) + '。'
+            return '. '.join(filtered) + '.'
         
-        return '。'.join(related) + '。' if related else ''
-    
+        return '. '.join(related) + '.' if related else ''
+
     def get_fill_report(self) -> str:
         """生成填充报告"""
         report_lines = ["\n📋 填充报告：\n"]
